@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 import { Toaster } from "sonner";
 
@@ -14,11 +15,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // A nonce is generated per request by proxy.ts. Dynamic rendering is required
+  // so Next.js can attach that nonce to framework and inline scripts.
+  await connection();
   return (
     <html
       lang="pt-BR"
