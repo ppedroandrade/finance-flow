@@ -63,6 +63,8 @@ export interface CreditCard {
   brand: "visa" | "mastercard" | "elo" | "other";
   last_digits: string;
   limit_amount: number;
+  used_limit_amount?: number | null;
+  limit_updated_at?: string | null;
   closing_day: number;
   due_day: number;
   color: string;
@@ -113,6 +115,8 @@ export interface CardInvoice {
   reference_month: string;
   due_date: string;
   status: "open" | "closed" | "paid";
+  statement_amount?: number | null;
+  paid_amount: number;
   paid_at?: string | null;
   created_at: string;
   updated_at: string;
