@@ -37,7 +37,14 @@ export function AuthForm() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (error) return toast.error("E-mail ou senha inválidos");
+    if (error) {
+      const message = error.code === "email_not_confirmed"
+        ? "Confirme seu e-mail no Supabase antes de entrar"
+        : error.code === "invalid_credentials"
+          ? "E-mail ou senha inválidos"
+          : `Falha no login: ${error.message}`;
+      return toast.error(message);
+    }
     const { data: factors } = await supabase.auth.mfa.listFactors();
     const verified = factors?.totp.find((factor) => factor.status === "verified");
     if (verified) {
