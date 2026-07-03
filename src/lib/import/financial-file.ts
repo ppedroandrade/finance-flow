@@ -71,6 +71,16 @@ function externalId(format: "ofx" | "csv", fitId: string | undefined, date: stri
   return fitId ? `ofx:${fitId.trim()}` : `${format}:${stableHash(transactionFingerprint(date, title, amount, type))}`;
 }
 
+function disambiguateGeneratedExternalIds(rows: ImportRow[]) {
+  const occurrences = new Map<string, number>();
+  return rows.map((row) => {
+    if (row.external_id.startsWith("ofx:")) return row;
+    const occurrence = (occurrences.get(row.external_id) ?? 0) + 1;
+    occurrences.set(row.external_id, occurrence);
+    return occurrence === 1 ? row : { ...row, external_id: `${row.external_id}:${occurrence}` };
+  });
+}
+
 function field(block: string, tag: string) {
   const match = block.match(new RegExp(`<${tag}>\\s*([^<\\r\\n]+)`, "i"));
   return match?.[1]?.trim();
@@ -203,7 +213,7 @@ export function parsePdfTextLines(lines: string[], source: string): ImportRow[] 
   const yearMatch = fullText.match(/\b(20\d{2})\b/);
   const defaultYear = yearMatch?.[1] ?? String(new Date().getFullYear());
   const cardFile = /fatura|cart[aã]o|limite dispon[ií]vel|vencimento da fatura/i.test(`${source}\n${fullText}`);
-  const ignored = /saldo anterior|saldo atual|saldo dispon[ií]vel|total da fatura|limite|vencimento|melhor dia|encargos|resumo/i;
+  const ignored = /saldo anterior|saldo atual|saldo do dia|saldo dispon[ií]vel|total da fatura|limite|vencimento|melhor dia|encargos|resumo/i;
 
   return lines.flatMap((line, index) => {
     if (ignored.test(line)) return [];
@@ -238,7 +248,7 @@ export function parsePdfTextLines(lines: string[], source: string): ImportRow[] 
 
 export async function parseFinancialFile(file: File, password?: string, csvMapping?: CsvColumnMapping) {
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (extension === "pdf") return parsePdf(file, password);
+  if (extension === "pdf") return disambiguateGeneratedExternalIds(await parsePdf(file, password));
   const buffer = await file.arrayBuffer();
   let text: string;
   try {
@@ -248,7 +258,7 @@ export async function parseFinancialFile(file: File, password?: string, csvMappi
   }
   const source = file.name.slice(0, 120);
   if (extension === "ofx") return parseOfx(text, source);
-  if (extension === "csv") return parseCsv(text, source, csvMapping);
+  if (extension === "csv") return disambiguateGeneratedExternalIds(parseCsv(text, source, csvMapping));
   throw new Error("Formato não suportado. Use um arquivo PDF, OFX ou CSV.");
 }
 

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { toast } from "sonner";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { createFinanceService, type TransactionFilters } from "@/services/finance-service";
+import { friendlyDatabaseError } from "@/lib/errors";
 import { localMonthKey } from "@/lib/utils";
 import type {
   Account, AccountInput, Budget, BudgetInput, CardInput, CardInvoice, Category, CategoryInput,
@@ -97,16 +98,44 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   async function insert<T>(table: WritableTable, input: object, setter: React.Dispatch<React.SetStateAction<T[]>>) {
     if (!userId) return false;
     const { data, error } = await createClient().from(table).insert({ ...input, user_id: userId }).select().single();
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     setter((items) => [data as T, ...items]);
     return true;
   }
 
   const importTransactions = async (inputs: TransactionInput[]) => {
     if (!userId || !inputs.length) return 0;
-    const { data, error } = await createClient().from("transactions")
-      .insert(inputs.map((input) => ({ ...input, user_id: userId }))).select();
-    if (error) { toast.error(error.message); return 0; }
+    const client = createClient();
+    const seen = new Set<string>();
+    const uniqueInputs = inputs.filter((input) => {
+      if (!input.external_id) return true;
+      if (seen.has(input.external_id)) return false;
+      seen.add(input.external_id);
+      return true;
+    });
+    const externalIds = [...seen];
+    const existingIds = new Set<string>();
+    for (let index = 0; index < externalIds.length; index += 100) {
+      const { data: existing, error: lookupError } = await client
+        .from("transactions")
+        .select("external_id")
+        .in("external_id", externalIds.slice(index, index + 100));
+      if (lookupError) {
+        toast.error(friendlyDatabaseError(lookupError));
+        return 0;
+      }
+      existing?.forEach((record) => {
+        if (record.external_id) existingIds.add(record.external_id);
+      });
+    }
+    const pendingInputs = uniqueInputs.filter((input) => !input.external_id || !existingIds.has(input.external_id));
+    if (!pendingInputs.length) {
+      toast.info("Esses lançamentos já foram importados.");
+      return 0;
+    }
+    const { data, error } = await client.from("transactions")
+      .insert(pendingInputs.map((input) => ({ ...input, user_id: userId }))).select();
+    if (error) { toast.error(friendlyDatabaseError(error)); return 0; }
     const records = data ?? [];
     setTransactions((items) => [...records, ...items].sort((a, b) => b.date.localeCompare(a.date)));
     return records.length;
@@ -145,20 +174,20 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const addRecurringBill = async (input: RecurringBillInput) => {
     if (!userId) return false;
     const { data, error } = await createClient().from("recurring_bills").insert({ ...input, user_id: userId }).select().single();
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     setRecurringBills((items) => [{ ...data, is_paid: false }, ...items]);
     return true;
   };
 
   const updateTransaction = async (id: string, input: TransactionInput) => {
     const { data, error } = await createClient().from("transactions").update(input).eq("id", id).select().single();
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     setTransactions((items) => items.map((item) => item.id === id ? data : item));
     return true;
   };
   const deleteTransaction = async (id: string) => {
     const { error } = await createClient().from("transactions").delete().eq("id", id);
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     setTransactions((items) => items.filter((item) => item.id !== id));
     return true;
   };
@@ -178,7 +207,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user_id: userId, card_id: cardId, reference_month: referenceMonth,
       due_date: dueDate, status: "paid", paid_at: now,
     }, { onConflict: "card_id,reference_month" }).select().single();
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     setCardInvoices((items) => [data, ...items.filter((item) => item.id !== data.id)]);
     return true;
   };
@@ -191,7 +220,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       ? createClient().from("recurring_bill_payments").delete().eq("id", existing.id).select().single()
       : createClient().from("recurring_bill_payments").insert({ user_id: userId, recurring_bill_id: id, reference_month: referenceMonth }).select().single();
     const { data, error } = await query;
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(friendlyDatabaseError(error)); return false; }
     if (existing) setRecurringBillPayments((items) => items.filter((item) => item.id !== existing.id));
     else setRecurringBillPayments((items) => [...items, data]);
     setRecurringBills((items) => items.map((item) => item.id === id ? { ...item, is_paid: !item.is_paid } : item));

@@ -42,6 +42,25 @@ describe("importador financeiro", () => {
     expect(rows[1].type).toBe("income");
   });
 
+  it("ignora saldo do dia em extratos PDF", () => {
+    const rows = parsePdfTextLines([
+      "Extrato da conta 2026",
+      "03/07 SALDO DO DIA 1.600,07",
+      "03/07 PIX EMITIDO PADARIA -42,90",
+    ], "extrato.pdf");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toContain("PIX EMITIDO PADARIA");
+  });
+
+  it("preserva lançamentos idênticos de CSV com identificadores distintos", async () => {
+    const file = new File([
+      "Data;Descrição;Valor\n03/07/2026;PIX EMITIDO;-150,00\n03/07/2026;PIX EMITIDO;-150,00",
+    ], "extrato.csv", { type: "text/csv" });
+    const rows = await parseFinancialFile(file);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].external_id).not.toBe(rows[1].external_id);
+  });
+
   it("aprende categoria usando o histórico", () => {
     const categories = [{ id: "food", name: "Alimentação", type: "expense" as const }];
     const history = [{ title: "Mercado Central Loja 10", type: "expense" as const, category_id: "food" }];
