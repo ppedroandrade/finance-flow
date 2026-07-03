@@ -1,0 +1,5 @@
+coverage
+supabase
+src/**/*.test.ts
+src/security
+SECURITY.md
