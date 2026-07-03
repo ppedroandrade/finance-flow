@@ -1,5 +1,5 @@
 coverage
-supabase
+/supabase
 src/**/*.test.ts
-src/security
+/src/security
 SECURITY.md
