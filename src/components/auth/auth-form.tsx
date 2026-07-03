@@ -7,7 +7,28 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { AuthError } from "@supabase/supabase-js";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+
+function authErrorMessage(error: AuthError) {
+  switch (error.code) {
+    case "invalid_credentials":
+      return "E-mail ou senha inválidos";
+    case "email_not_confirmed":
+      return "Confirme seu e-mail no Supabase antes de entrar";
+    case "user_banned":
+      return "Esta conta está bloqueada";
+    case "over_request_rate_limit":
+    case "over_email_send_rate_limit":
+      return "Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente";
+    case "request_timeout":
+      return "O Supabase demorou para responder. Tente novamente";
+  }
+  if (error.name === "AuthRetryableFetchError") {
+    return "Não foi possível conectar ao Supabase. Verifique sua internet e tente novamente";
+  }
+  return `Falha no login: ${error.message}`;
+}
 
 export function AuthForm() {
   const router = useRouter();
@@ -34,36 +55,41 @@ export function AuthForm() {
     if (!email.includes("@") || !password) return toast.error("Preencha seu e-mail e sua senha");
     if (!isSupabaseConfigured()) return toast.error("Configure as variáveis do Supabase para continuar");
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      const message = error.code === "email_not_confirmed"
-        ? "Confirme seu e-mail no Supabase antes de entrar"
-        : error.code === "invalid_credentials"
-          ? "E-mail ou senha inválidos"
-          : `Falha no login: ${error.message}`;
-      return toast.error(message);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return toast.error(authErrorMessage(error));
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const verified = factors?.totp.find((factor) => factor.status === "verified");
+      if (verified) {
+        setFactorId(verified.id);
+        return;
+      }
+      router.replace("/dashboard");
+      router.refresh();
+    } finally {
+      setLoading(false);
     }
-    const { data: factors } = await supabase.auth.mfa.listFactors();
-    const verified = factors?.totp.find((factor) => factor.status === "verified");
-    if (verified) {
-      setFactorId(verified.id);
-      return;
-    }
-    router.replace("/dashboard");
-    router.refresh();
   };
 
   const verifyMfa = async (event: React.FormEvent) => {
     event.preventDefault();
     if (totpCode.length !== 6) return toast.error("Digite o código de 6 números");
     setLoading(true);
-    const { error } = await createClient().auth.mfa.challengeAndVerify({ factorId, code: totpCode });
-    setLoading(false);
-    if (error) return toast.error("Código inválido ou expirado");
-    router.replace("/dashboard");
-    router.refresh();
+    try {
+      const { error } = await createClient().auth.mfa.challengeAndVerify({ factorId, code: totpCode });
+      if (error) {
+        return toast.error(
+          error.code === "mfa_challenge_expired"
+            ? "O código expirou, digite o novo código gerado pelo app"
+            : "Código inválido ou expirado",
+        );
+      }
+      router.replace("/dashboard");
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (factorId) return (
