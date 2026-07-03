@@ -31,7 +31,7 @@ export function AuthForm() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!email.includes("@") || password.length < 10) return toast.error("Confira o e-mail e use sua senha completa");
+    if (!email.includes("@") || !password) return toast.error("Preencha seu e-mail e sua senha");
     if (!isSupabaseConfigured()) return toast.error("Configure as variáveis do Supabase para continuar");
     setLoading(true);
     const supabase = createClient();
@@ -76,7 +76,7 @@ export function AuthForm() {
   return (
     <form onSubmit={submit} className="mt-8 space-y-4">
       <div><Label htmlFor="email">E-mail do proprietário</Label><Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="seu@email.com" required /></div>
-      <div><Label htmlFor="password">Senha</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Sua senha" className="pr-11" required minLength={10} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></div></div>
+      <div><Label htmlFor="password">Senha</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Sua senha" className="pr-11" required /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button></div></div>
       <Button type="submit" size="lg" className="mt-2 w-full" disabled={loading}>{loading ? <LoaderCircle className="size-4 animate-spin" /> : <>Entrar com segurança<ArrowRight className="size-4" /></>}</Button>
       <div className="flex items-start gap-2 pt-2 text-[11px] leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />Acesso restrito ao proprietário configurado. Não existe cadastro público.</div>
     </form>

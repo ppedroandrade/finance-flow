@@ -22,7 +22,7 @@ export async function proxy(request: NextRequest) {
   };
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    const isPublic = request.nextUrl.pathname === "/login";
+    const isPublic = request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/api/health";
     if (!isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -57,7 +57,8 @@ export async function proxy(request: NextRequest) {
     return secure(NextResponse.redirect(url));
   }
   const isAuthPage = request.nextUrl.pathname === "/login";
-  if ((!user || needsMfa) && !isAuthPage) {
+  const isHealthCheck = request.nextUrl.pathname === "/api/health";
+  if ((!user || needsMfa) && !isAuthPage && !isHealthCheck) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return secure(NextResponse.redirect(url));
